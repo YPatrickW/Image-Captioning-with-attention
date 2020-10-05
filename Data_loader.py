@@ -33,7 +33,7 @@ class CocoDataset(Dataset):
         tokens = nltk.word_tokenize(image_caption.lower())
 
         caption_id_list = [self.Vocal("<start>")]
-        caption_id_list.extend([self.Vocal[token] for token in tokens])
+        caption_id_list.extend([self.Vocal(token) for token in tokens])
         caption_id_list.append(self.Vocal("<end>"))
 
         target = torch.tensor(caption_id_list)
@@ -55,10 +55,16 @@ def collate_fn(image_and_target):  # rewrite the batch iteration
     return images, padded_target, lengths  # the length of lengths is the batch_size
 
 
-def get_loader(root, json, vocabulary, transform, batch_size, num_workers,shuffle=True):
+def get_loader(root, json, vocabulary, transform, batch_size, num_workers, shuffle=True):
     Coco_dataset = CocoDataset(root=root, json=json, vocabulary=vocabulary, transform=transform)
     Coco_dataloader = DataLoader(dataset=Coco_dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=collate_fn,
-                                 num_workers=num_workers)
+                                  num_workers=num_workers)
     return Coco_dataloader
 
 
+if __name__ == '__main__':
+    store_path = "./Vocabulary_dict/Vocab_train.pkl"
+    with open(store_path,"rb") as f:
+        vocabulary = pickle.load(f)
+    Coco_data_loader = get_loader(root="./images/resized_train/", json="./annotations/captions_train2014.json",
+                                  vocabulary=vocabulary, transform=transforms, batch_size=64, num_workers=2, shuffle=True)
