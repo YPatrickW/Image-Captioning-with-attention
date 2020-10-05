@@ -51,11 +51,10 @@ def build_vocab(json_dir, threshold):
     return Vocabulary_dict
 
 
-Vocabulary_dict_train = build_vocab(json_dir="./annotations/captions_train2014.json", threshold=3)
-print("The total length of train Vocabulary_dict is", len(Vocabulary_dict_train))
-store_path = "./Vocabulary_dict/Vocab_train.pkl"
-with open(store_path,"wb") as f:
-    pickle.dump(Vocabulary_dict_train,f)
-print("Vocabulary_dict for train has established")
-
-
+if __name__ == '__main__':
+    Vocabulary_dict_train = build_vocab(json_dir="./annotations/captions_train2014.json", threshold=3)
+    print("The total length of train Vocabulary_dict is", len(Vocabulary_dict_train))
+    store_path = "./Vocabulary_dict/Vocab_train.pkl"
+    with open(store_path, "wb") as f:
+        pickle.dump(Vocabulary_dict_train, f)
+    print("Vocabulary_dict for train has established")
