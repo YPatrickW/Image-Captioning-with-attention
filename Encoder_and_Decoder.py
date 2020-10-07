@@ -50,8 +50,40 @@ class Decoder_with_attention(torch.nn.Module):
         self.embed_dim = embed_dim
         self.vocab_size = vocab_size
         self.decoder_dim = decoder_dim
+        self.dropout = dropout
 
         self.attention = Attention(encoder_dim,decoder_dim,attention_dim)
 
         self.embedding = torch.nn.Embedding(vocab_size,embed_dim)
-        self.dropout = torch.nn.Dropout(p=dropout)
+        self.decode_step = torch.nn.LSTMCell(embed_dim+encoder_dim,decoder_dim,bias=True)
+        self.init_h = torch.nn.Linear(encoder_dim,decoder_dim)
+        self.init_c = torch.nn.Linear(encoder_dim,decoder_dim)
+        self.f_beta = torch.nn.Linear(decoder_dim,encoder_dim)
+        self.fc = torch.nn.Linear(decoder_dim,vocab_size)
+        self.sigmoid = torch.nn.Sigmoid()
+
+    def init_weights(self):
+        self.embedding.weight.data.uniform_(-0.1,0.1)
+        self.fc.bias.fill_(0)
+        self.fc.weight.data.uniform_(-0.1,0.1)
+
+    def init_hidden_state(self,encoder_out):
+        mean_encoder_out = encoder_out.mean(dim=1)
+        h = self.init_h(mean_encoder_out)
+        c = self.init_c(mean_encoder_out)
+        return h,c
+
+    def forward(self,encoder_out,captions,caption_lengths):
+        batch_size = encoder_out.shape[0]
+        encoder_dim = encoder_out.shape[3]
+        vocab_size = self.vocab_size
+
+        # Flatten the image
+        encoder_out = encoder_out.view(batch_size,-1,encoder_dim) # batch_size x num_pixels(14x14) x encoder_dim
+        num_pixels = encoder_out.shape[1]
+
+        # Embedding
+        embedded_captions = self.embedding(captions) # Batch_size x Max_Caption_lengths x embed_dim
+
+        # LSTM
+        h,c = self.init_hidden_state(encoder_out) # Batch_size x decoder_dim
