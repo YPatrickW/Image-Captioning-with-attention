@@ -25,16 +25,24 @@ class Vocabulary(object):
         return len(self.word2idx)
 
 
-def build_vocab(json_dir, threshold):
-    Coco_captions = COCO(json_dir)
+def build_vocab(json_dir_train, json_dir_val,threshold):
+    Coco_captions_train = COCO(json_dir_train)
+    Coco_captions_val = COCO(json_dir_val)
     counter = Counter()
-    ids = Coco_captions.anns.keys()
-    for i, caption_id in enumerate(ids):
-        captions = Coco_captions.anns[caption_id]["caption"]
+    ids_train = Coco_captions_train.anns.keys()
+    ids_val = Coco_captions_val.anns.keys()
+    for i, caption_id in enumerate(ids_train):
+        captions = Coco_captions_train.anns[caption_id]["caption"]
         token = nltk.tokenize.word_tokenize(captions.lower())
         counter.update(token)
         if (i + 1) % 100000 == 0:
-            print("[{}/{}] has been tokenized".format(i + 1, len(ids)))
+            print("[{}/{}] has been tokenized".format(i + 1, len(ids_train)))
+    for i, caption_id in enumerate(ids_val):
+        captions = Coco_captions_val.anns[caption_id]["caption"]
+        token = nltk.tokenize.word_tokenize(captions.lower())
+        counter.update(token)
+        if (i + 1) % 100000 == 0:
+            print("[{}/{}] has been tokenized".format(i + 1, len(ids_val)))
     word_list = []
     for word, freq in counter.items():
         if freq > threshold:
@@ -52,9 +60,9 @@ def build_vocab(json_dir, threshold):
 
 
 if __name__ == '__main__':
-    Vocabulary_dict_train = build_vocab(json_dir="./annotations/captions_train2014.json", threshold=3)
-    print("The total length of train Vocabulary_dict is", len(Vocabulary_dict_train))
-    store_path = "./Vocabulary_dict/Vocab_train.pkl"
+    Vocabulary_dict = build_vocab(json_dir_train="./annotations/captions_train2014.json",json_dir_val="./annotations/captions_val2014.json",threshold=3)
+    print("The total length of train Vocabulary_dict is", len(Vocabulary_dict))
+    store_path = "./Vocabulary_dict/Vocab_dict.pkl"
     with open(store_path, "wb") as f:
-        pickle.dump(Vocabulary_dict_train, f)
-    print("Vocabulary_dict for train has established")
+        pickle.dump(Vocabulary_dict, f)
+    print("Vocabulary_dict has established")
