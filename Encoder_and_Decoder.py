@@ -39,11 +39,12 @@ class Attention(torch.nn.Module):  # Attention mechanism to calculate the weight
         att = self.attention_value(att)
         att = att.squeeze(2)  # batch_size x num_pixels
         alpha = self.nn.Softmax(att)  # calculate the weights for pixels
-        encoding_with_attention = (encoder_out * alpha.unsqueeze(2)).sum(dim=1) # batch_size x encoder_dim
-        return encoding_with_attention,alpha
+        encoding_with_attention = (encoder_out * alpha.unsqueeze(2)).sum(dim=1)  # batch_size x encoder_dim
+        return encoding_with_attention, alpha
+
 
 class Decoder_with_attention(torch.nn.Module):
-    def __init__(self,attention_dim,embed_dim,decoder_dim,vocab_size,encoder_dim=2048,dropout=0.5):
+    def __init__(self, attention_dim, embed_dim, decoder_dim, vocab_size, encoder_dim=2048, dropout=0.5):
         super(Decoder_with_attention, self).__init__()
         self.encoder_dim = encoder_dim
         self.attention_dim = attention_dim
@@ -51,39 +52,61 @@ class Decoder_with_attention(torch.nn.Module):
         self.vocab_size = vocab_size
         self.decoder_dim = decoder_dim
         self.dropout = dropout
+        self.dropout = torch.nn.Dropout(p=self.dropout)
 
-        self.attention = Attention(encoder_dim,decoder_dim,attention_dim)
+        self.attention = Attention(encoder_dim, decoder_dim, attention_dim)
 
-        self.embedding = torch.nn.Embedding(vocab_size,embed_dim)
-        self.decode_step = torch.nn.LSTMCell(embed_dim+encoder_dim,decoder_dim,bias=True)
-        self.init_h = torch.nn.Linear(encoder_dim,decoder_dim)
-        self.init_c = torch.nn.Linear(encoder_dim,decoder_dim)
-        self.f_beta = torch.nn.Linear(decoder_dim,encoder_dim)
-        self.fc = torch.nn.Linear(decoder_dim,vocab_size)
+        self.embedding = torch.nn.Embedding(vocab_size, embed_dim)
+        self.decode_step = torch.nn.LSTMCell(embed_dim + encoder_dim, decoder_dim, bias=True)
+        self.init_h = torch.nn.Linear(encoder_dim, decoder_dim)
+        self.init_c = torch.nn.Linear(encoder_dim, decoder_dim)
+        self.f_beta = torch.nn.Linear(decoder_dim, encoder_dim)
+        self.fc = torch.nn.Linear(decoder_dim, vocab_size)
         self.sigmoid = torch.nn.Sigmoid()
 
     def init_weights(self):
-        self.embedding.weight.data.uniform_(-0.1,0.1)
+        self.embedding.weight.data.uniform_(-0.1, 0.1)
         self.fc.bias.fill_(0)
-        self.fc.weight.data.uniform_(-0.1,0.1)
+        self.fc.weight.data.uniform_(-0.1, 0.1)
 
-    def init_hidden_state(self,encoder_out):
+    def init_hidden_state(self, encoder_out):
         mean_encoder_out = encoder_out.mean(dim=1)
         h = self.init_h(mean_encoder_out)
         c = self.init_c(mean_encoder_out)
-        return h,c
+        return h, c
 
-    def forward(self,encoder_out,captions,caption_lengths):
+    def forward(self, encoder_out, captions, caption_lengths):
         batch_size = encoder_out.shape[0]
         encoder_dim = encoder_out.shape[3]
         vocab_size = self.vocab_size
 
         # Flatten the image
-        encoder_out = encoder_out.view(batch_size,-1,encoder_dim) # batch_size x num_pixels(14x14) x encoder_dim
+        encoder_out = encoder_out.view(batch_size, -1, encoder_dim)  # batch_size x num_pixels(14x14) x encoder_dim
         num_pixels = encoder_out.shape[1]
 
         # Embedding
-        embedded_captions = self.embedding(captions) # Batch_size x Max_Caption_lengths x embed_dim
+        embedded_captions = self.embedding(captions)  # Batch_size x Max_Caption_lengths x embed_dim
 
         # LSTM
-        h,c = self.init_hidden_state(encoder_out) # Batch_size x decoder_dim
+        h, c = self.init_hidden_state(encoder_out)  # Batch_size x decoder_dim
+
+        # Do not decode as the <end> position
+        decode_lengths = caption_lengths - 1
+
+        predictions = torch.zeros(batch_size, max(decode_lengths), vocab_size).to(device)
+        alphas = torch.zeros(batch_size, max(decode_lengths), num_pixels).to(device)
+
+        for t in range(max(decode_lengths)):
+            batch_size_t = sum(
+                [l > t for l in decode_lengths])  # determine training how many samples in a batch for a time step
+            attention_weighted_encoding, alpha = self.attention(encoder_out[:batch_size_t], h[:batch_size_t])
+            gate = self.sigmoid(self.f_beta(h[:batch_size_t]))
+            attention_weighted_encoding = gate * attention_weighted_encoding
+            h, c = self.decode_step(
+                torch.cat([embedded_captions[:batch_size_t, t, :], attention_weighted_encoding], dim=1),
+                (h[:batch_size_t], c[:batch_size_t])
+                )
+            pred = self.fc(self.dropout(h))
+            predictions[:batch_size_t, t, :] = pred
+            alphas[:batch_size_t, t, :] = alpha
+        return predictions, captions, decode_lengths, alphas
