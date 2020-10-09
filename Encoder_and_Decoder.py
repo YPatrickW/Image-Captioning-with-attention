@@ -16,11 +16,17 @@ class CNN_Encoder(torch.nn.Module):
     def forward(self, images):
         # images: batch_size x 3 x width x height (width,height is 256)
         # out : batch_size x 2048 x width/3 x height/3 (out is 8)
-        with torch.no_grad():
-            out = self.resnet(images)
-            out = self.adaptive_pool(out)  # transform the out's width and height to 14
-            out = out.permute(0, 2, 3, 1)  # batch_size x encoded_size x encoded_size x channel(2048)
+        out = self.resnet(images)
+        out = self.adaptive_pool(out)  # transform the out's width and height to 14
+        out = out.permute(0, 2, 3, 1)  # batch_size x encoded_size x encoded_size x channel(2048)
         return out
+
+    def Calculate_grads(self, fine_tune=True):
+        for p in self.resnet.parameters():
+            p.requires_grad = False
+        for Conv_block in list(self.resnet.children())[5:]:
+            for p in Conv_block.parameters():
+                p.requires_grad = fine_tune
 
 
 class Attention(torch.nn.Module):  # Attention mechanism to calculate the weights
@@ -38,7 +44,7 @@ class Attention(torch.nn.Module):  # Attention mechanism to calculate the weight
         att = torch.relu(att_1 + att_2)
         att = self.attention_value(att)
         att = att.squeeze(2)  # batch_size x num_pixels
-        alpha = self.nn.Softmax(att)  # calculate the weights for pixels
+        alpha = self.nn.Softmax(att)  # calculate the weights for pixels (batch_size x num_pixels)
         encoding_with_attention = (encoder_out * alpha.unsqueeze(2)).sum(dim=1)  # batch_size x encoder_dim
         return encoding_with_attention, alpha
 
@@ -54,7 +60,8 @@ class Decoder_with_attention(torch.nn.Module):
         self.dropout = dropout
         self.dropout = torch.nn.Dropout(p=self.dropout)
 
-        self.attention = Attention(encoder_dim, decoder_dim, attention_dim)
+        self.attention = Attention(encoder_dim, decoder_dim,
+                                   attention_dim)  # Attention net to calculate the weight for pixels
 
         self.embedding = torch.nn.Embedding(vocab_size, embed_dim)
         self.decode_step = torch.nn.LSTMCell(embed_dim + encoder_dim, decoder_dim, bias=True)
@@ -71,13 +78,13 @@ class Decoder_with_attention(torch.nn.Module):
 
     def init_hidden_state(self, encoder_out):
         mean_encoder_out = encoder_out.mean(dim=1)
-        h = self.init_h(mean_encoder_out)
+        h = self.init_h(mean_encoder_out)  # batch_size x decoder_dim
         c = self.init_c(mean_encoder_out)
         return h, c
 
     def forward(self, encoder_out, captions, caption_lengths):
         batch_size = encoder_out.shape[0]
-        encoder_dim = encoder_out.shape[3]
+        encoder_dim = encoder_out.shape[3]  # 2048
         vocab_size = self.vocab_size
 
         # Flatten the image
@@ -105,7 +112,7 @@ class Decoder_with_attention(torch.nn.Module):
             h, c = self.decode_step(
                 torch.cat([embedded_captions[:batch_size_t, t, :], attention_weighted_encoding], dim=1),
                 (h[:batch_size_t], c[:batch_size_t])
-                )
+            )
             pred = self.fc(self.dropout(h))
             predictions[:batch_size_t, t, :] = pred
             alphas[:batch_size_t, t, :] = alpha
