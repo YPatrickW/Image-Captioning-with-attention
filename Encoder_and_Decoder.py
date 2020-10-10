@@ -44,7 +44,7 @@ class Attention(torch.nn.Module):  # Attention mechanism to calculate the weight
         att = torch.relu(att_1 + att_2)
         att = self.attention_value(att)
         att = att.squeeze(2)  # batch_size x num_pixels
-        alpha = self.nn.Softmax(att)  # calculate the weights for pixels (batch_size x num_pixels)
+        alpha = self.softmax(att)  # calculate the weights for pixels (batch_size x num_pixels)
         encoding_with_attention = (encoder_out * alpha.unsqueeze(2)).sum(dim=1)  # batch_size x encoder_dim
         return encoding_with_attention, alpha
 
@@ -98,7 +98,10 @@ class Decoder_with_attention(torch.nn.Module):
         h, c = self.init_hidden_state(encoder_out)  # Batch_size x decoder_dim
 
         # Do not decode as the <end> position
-        decode_lengths = caption_lengths - 1
+        decode_lengths = []
+        for i in caption_lengths:
+            new_length = i-1
+            decode_lengths.append(new_length)
 
         predictions = torch.zeros(batch_size, max(decode_lengths), vocab_size).to(device)
         alphas = torch.zeros(batch_size, max(decode_lengths), num_pixels).to(device)
