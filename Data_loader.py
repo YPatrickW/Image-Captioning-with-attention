@@ -58,5 +58,5 @@ def collate_fn(image_and_target):  # rewrite the batch iteration
 def get_loader(root, json, vocabulary, transform, batch_size, num_workers, shuffle=True):
     Coco_dataset = CocoDataset(root=root, json=json, vocabulary=vocabulary, transform=transform)
     Coco_dataloader = DataLoader(dataset=Coco_dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=collate_fn,
-                                  num_workers=num_workers)
+                                 num_workers=num_workers)
     return Coco_dataloader
