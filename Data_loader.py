@@ -60,11 +60,3 @@ def get_loader(root, json, vocabulary, transform, batch_size, num_workers, shuff
     Coco_dataloader = DataLoader(dataset=Coco_dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=collate_fn,
                                   num_workers=num_workers)
     return Coco_dataloader
-
-
-if __name__ == '__main__':
-    store_path = "./Vocabulary_dict/Vocab_dict.pkl"
-    with open(store_path,"rb") as f:
-        vocabulary = pickle.load(f)
-    Coco_data_loader = get_loader(root="./images/resized_train/", json="./annotations/captions_train2014.json",
-                                  vocabulary=vocabulary, transform=transforms, batch_size=64, num_workers=2, shuffle=True)
