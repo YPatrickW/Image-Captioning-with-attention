@@ -11,7 +11,12 @@ import torch.nn as nn
 import numpy as np
 from nltk.translate.bleu_score import corpus_bleu
 from others import *
+import time
 
+
+Model_cache = "./Model_cache/"
+
+# Model parameters
 embed_dim = 512
 attention_dim = 512
 decoder_dim = 512
@@ -86,4 +91,8 @@ def main():
 
 
 def train(train_loader, encoder, decoder, criterion, encoder_optimizer, decoder_optimizer, epoch):
-    pass
+    encoder.train() # special mode for training: Batch_norm and dropout is True
+    decoder.train()
+
+
+
