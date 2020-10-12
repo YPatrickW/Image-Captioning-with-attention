@@ -3,18 +3,14 @@ import numpy as np
 import torch.nn.functional as F
 import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
-import matplotlib.cm as cm
 import skimage.transform
 from PIL import Image
 from imageio import imread
 import pickle
 from Build_Vocab import *
+import argparse
 
 device = ("cuda" if torch.cuda.is_available() else "cpu")
-
-vocabulary_path = "./Vocabulary_dict/Vocab_dict.pkl"
-with open(vocabulary_path, "rb") as f:
-    word_dict = pickle.load(f)
 
 
 def beam_search(encoder, decoder, image_path, word_dict, beam_size=3):
@@ -49,7 +45,7 @@ def beam_search(encoder, decoder, image_path, word_dict, beam_size=3):
 
     complete_seqs = list()
     complete_seqs_alpha = list()
-    complete_seqs_score = list()
+    complete_seqs_scores = list()
 
     step = 1
     h, c = decoder.init_hidden_state(encoder_out)
@@ -79,11 +75,85 @@ def beam_search(encoder, decoder, image_path, word_dict, beam_size=3):
         seqs = torch.cat([seqs[prev_word_idx], next_word_idx.unsqueeze(dim=1)], dim=1)
         seq_alpha = torch.cat([seq_alpha[prev_word_idx], alpha[prev_word_idx].unsqueeze(1)], dim=1)
 
-        incomplete_idxs = [ind for ind,next_word in enumerate(next_word_idx) if next_word != word_dict("<end>")]
-        complete_idxs = list()
+        incomplete_idxs = [ind for ind, next_word in enumerate(next_word_idx) if next_word != word_dict("<end>")]
+        complete_idxs = list(set(len(next_word_idx))) - set(incomplete_idxs)
 
-    print(complete_seqs)
+        if len(complete_idxs) > 0:
+            complete_seqs.extend(seqs[complete_idxs].tolist())
+            complete_seqs_alpha.extend((seq_alpha[complete_idxs].tolist()))
+            complete_seqs_scores.extend((top_k_scores[complete_idxs]))
+            k = k - len(complete_idxs)
+
+        if k == 0:
+            break
+
+        seqs = seqs[incomplete_idxs]
+        h = h[prev_word_idx[incomplete_idxs]]
+        c = c[prev_word_idx[incomplete_idxs]]
+        encoder_out = encoder_out[prev_word_idx[incomplete_idxs]]
+        top_k_scores = top_k_scores[incomplete_idxs].unsqueeze(1)
+        k_prev_word = next_word_idx[incomplete_idxs].unsqueeze(1)
+
+        if step > 50:
+            break
+        step = step + 1
+
+    i = complete_seqs_scores.index(max(complete_seqs_scores))
+    seq = complete_seqs[i]
+    alphas = complete_seqs_alpha[i]
+
+    return seq, alphas
 
 
-beam_search(encoder=None, decoder=None, image_path="./images/resized_train/COCO_train2014_000000000009.jpg",
-            word_dict=word_dict)
+def visualize_att(image_path, seq, alphas, word_dict, smooth=True):
+    image = Image.open(image_path)
+    image = image.resize([14 * 24, 14 * 24], Image.LANCZOS)
+
+    words = [word_dict.idx2word[idx] for idx in seq]
+
+    for t in range(len(words)):
+        if t > 50:
+            break
+        plt.subplot(np.ceil(len(words) / 5.), 5, t + 1)
+
+        plt.text(0, 1, '%s' % (words[t]), color='black', backgroundcolor='white', fontsize=12)
+        plt.imshow(image)
+        current_alpha = alphas[t, :]
+        if smooth:
+            alpha = skimage.transform.pyramid_expand(current_alpha.numpy(), upscale=24, sigma=8)
+        else:
+            alpha = skimage.transform.resize(current_alpha.numpy(), [14 * 24, 14 * 24])
+        if t == 0:
+            plt.imshow(alpha, alpha=0)
+        else:
+            plt.imshow(alpha, alpha=0.8)
+        plt.set_cmap(cmap=plt.get_cmap("grey_r"))
+        plt.axis('off')
+    plt.show()
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="It is time to generate captions")
+    parser.add_argument("--img", "-i", help="path of image")
+    parser.add_argument("--model", "-m", help="path of model")
+    parser.add_argument("--word_dict", "-wd", help="path of word_dict")
+    parser.add_argument("--beam_size", "-b", default=5, type=int, help="beam size for beam search")
+
+    args = parser.parse_args()
+
+    checkpoint = torch.load(args.model, map_location=str(device))
+    decoder = checkpoint["decoder"]
+    encoder = checkpoint["encoder"]
+    encoder = encoder.to(device)
+    decoder = decoder.to(device)
+    decoder.eval()
+    encoder.eval()
+
+    vocabulary_path = "./Vocabulary_dict/Vocab_dict.pkl"
+    with open(vocabulary_path, "rb") as f:
+        word_dict = pickle.load(f)
+    seq, alphas = beam_search(encoder, decoder, args.img, word_dict, args.beamsize)
+
+    alphas = torch.FloatTensor(alphas)
+
+    visualize_att(args.img, seq, alphas, word_dict)
