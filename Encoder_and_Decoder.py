@@ -1,6 +1,7 @@
 import torch
 import torchvision.models as models
 from torch.nn.utils.rnn import pack_padded_sequence
+import numpy as np
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -103,10 +104,11 @@ class Decoder_with_attention(torch.nn.Module):
             new_length = i-1
             decode_lengths.append(new_length)
 
-        predictions = torch.zeros(batch_size, max(decode_lengths), vocab_size).to(device)
-        alphas = torch.zeros(batch_size, max(decode_lengths), num_pixels).to(device)
+        max_decode_length = int(max(decode_lengths))
+        predictions = torch.zeros(size=(batch_size,max_decode_length,self.vocab_size)).to(device)
+        alphas = torch.zeros(batch_size, max_decode_length, num_pixels).to(device)
 
-        for t in range(max(decode_lengths)):
+        for t in range(max_decode_length):
             batch_size_t = sum(
                 [l > t for l in decode_lengths])  # determine training how many samples in a batch for a time step
             attention_weighted_encoding, alpha = self.attention(encoder_out[:batch_size_t], h[:batch_size_t])
